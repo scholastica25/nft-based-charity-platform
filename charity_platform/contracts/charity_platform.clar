@@ -98,3 +98,132 @@
         timestamp: uint,
     }
 )
+
+;; Read-only functions
+(define-read-only (get-token-uri (token-id uint))
+    (map-get? token-uri token-id)
+)
+
+(define-read-only (get-owner (token-id uint))
+    (map-get? nft-owners token-id)
+)
+
+(define-read-only (get-price (token-id uint))
+    (map-get? nft-price token-id)
+)
+
+(define-read-only (get-token-metadata (token-id uint))
+    (map-get? nft-metadata token-id)
+)
+
+(define-read-only (get-campaign-details (campaign-id uint))
+    (map-get? charity-campaigns campaign-id)
+)
+
+(define-read-only (get-user-donation-history
+        (user principal)
+        (campaign-id uint)
+    )
+    (map-get? user-donations {
+        user: user,
+        campaign-id: campaign-id,
+    })
+)
+
+;; Read-only functions for new features
+(define-read-only (get-campaign-nfts (campaign-id uint))
+    (map-get? campaign-nfts campaign-id)
+)
+
+(define-read-only (get-user-campaign-stats
+        (user principal)
+        (campaign-id uint)
+    )
+    (map-get? user-campaign-participation {
+        user: user,
+        campaign-id: campaign-id,
+    })
+)
+
+(define-read-only (get-campaign-milestone
+        (campaign-id uint)
+        (milestone-id uint)
+    )
+    (map-get? campaign-milestones {
+        campaign-id: campaign-id,
+        milestone-id: milestone-id,
+    })
+)
+
+(define-read-only (get-user-rewards (user principal))
+    (map-get? user-rewards user)
+)
+
+;; Private functions
+(define-private (check-owner
+        (token-id uint)
+        (acc uint)
+    )
+    (if (is-eq (some tx-sender) (map-get? nft-owners token-id))
+        (+ acc u1)
+        acc
+    )
+)
+
+(define-private (transfer-token
+        (token-id uint)
+        (sender principal)
+        (recipient principal)
+    )
+    (begin
+        (map-set nft-owners token-id recipient)
+        (ok true)
+    )
+)
+
+;; Public functions - NFT Core
+(define-public (mint
+        (uri (string-utf8 256))
+        (category (string-utf8 64))
+    )
+    (let ((token-id (+ (var-get total-nfts) u1)))
+        (begin
+            (asserts! (not (var-get paused)) (err u108))
+            (map-set nft-owners token-id tx-sender)
+            (map-set token-uri token-id uri)
+            (map-set nft-metadata token-id {
+                creator: tx-sender,
+                timestamp: stacks-block-height,
+                category: category,
+            })
+            (var-set total-nfts token-id)
+            (ok token-id)
+        )
+    )
+)
+
+;; Public functions - NFT Trading
+(define-public (transfer
+        (token-id uint)
+        (recipient principal)
+    )
+    (let ((owner (unwrap! (map-get? nft-owners token-id) (err u1))))
+        (asserts! (is-eq tx-sender owner) err-not-token-owner)
+        (transfer-token token-id owner recipient)
+    )
+)
+
+(define-public (list-for-sale
+        (token-id uint)
+        (price uint)
+    )
+    (let ((owner (unwrap! (map-get? nft-owners token-id) (err u1))))
+        (begin
+            (asserts! (not (var-get paused)) (err u108))
+            (asserts! (is-eq tx-sender owner) err-not-token-owner)
+            (asserts! (> price u0) err-invalid-price)
+            (map-set nft-price token-id price)
+            (ok true)
+        )
+    )
+)
