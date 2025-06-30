@@ -466,3 +466,60 @@
         )
     )
 )
+
+;; Administrative functions
+(define-public (set-charity-address (new-address principal))
+    (begin
+        (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+        (var-set charity-address new-address)
+        (ok true)
+    )
+)
+
+(define-public (set-donation-percentage (new-percentage uint))
+    (begin
+        (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+        (asserts! (<= new-percentage u100) (err u104))
+        (var-set donation-percentage new-percentage)
+        (ok true)
+    )
+)
+
+(define-public (toggle-pause)
+    (begin
+        (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+        (var-set paused (not (var-get paused)))
+        (ok true)
+    )
+)
+
+(define-public (end-campaign (campaign-id uint))
+    (let ((campaign (unwrap! (map-get? charity-campaigns campaign-id) err-campaign-not-found)))
+        (begin
+            (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+            (map-set charity-campaigns campaign-id
+                (merge campaign { active: false })
+            )
+            (ok true)
+        )
+    )
+)
+
+;; Public functions - Campaign Analytics
+(define-public (generate-campaign-report (campaign-id uint))
+    (let (
+            (campaign (unwrap! (map-get? charity-campaigns campaign-id)
+                err-campaign-not-found
+            ))
+            (campaign-nft-list (default-to (list) (map-get? campaign-nfts campaign-id)))
+        )
+        (ok {
+            name: (get name campaign),
+            total-raised: (get raised campaign),
+            goal-percentage: (/ (* (get raised campaign) u100) (get goal campaign)),
+            total-nfts: (len campaign-nft-list),
+            is-active: (get active campaign),
+            remaining-blocks: (- (get deadline campaign) stacks-block-height),
+        })
+    )
+)
